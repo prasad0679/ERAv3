@@ -4,12 +4,14 @@
 
   // Listen for messages from the background script
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    console.log("Message received:", request);
     if (request.action === "openFloatingWindow") {
       openFloatingWindow();
     }
   });
 
   function initializeSummarizer() {
+    console.log("Initializing summarizer");
     const floatingWindow = document.getElementById('summarizer-floating-window');
     const summarizerButton = document.getElementById('summarizer-button');
     const wordCountSelect = document.getElementById('summarizer-word-count');
@@ -46,28 +48,48 @@
     console.log('Initializing summarizer with word count:', defaultWordCount);
   }
 
-  function handleSummarizerClick() {
-    const selectedText = window.getSelection().toString().trim();
-    if (selectedText.length > 0) {
-      summarizerActive = true;
-      summarizeSelectedText();
-    } else {
-      showMessage("Please select the text for summarization and then click the button");
-    }
+  function getSelectedText() {
+    return window.getSelection().toString().trim();
   }
 
-  function summarizeSelectedText() {
-    const selectedText = window.getSelection().toString().trim();
-    const summaryLength = parseInt(document.getElementById('summarizer-word-count').value);
-    showLoadingIndicator();
-    summarizeText(selectedText, summaryLength).then(summary => {
-      hideLoadingIndicator();
-      showSummaryWindow(summary);
-    }).catch(error => {
-      hideLoadingIndicator();
-      console.error('Error generating summary:', error);
-      showSummaryWindow('An error occurred while generating the summary. Please try again.');
-    });
+  function handleSummarizerClick() {
+    console.log("Summarizer button clicked");
+    const selectedText = getSelectedText();
+    if (!selectedText) {
+      alert('Please select some text on the page to summarize.');
+      return;
+    }
+
+    const apiKey = document.getElementById('openai-api-key').value;
+    if (!apiKey) {
+      alert('Please enter your OpenAI API key.');
+      return;
+    }
+
+    const wordCount = document.getElementById('summarizer-word-count').value;
+
+    const summarizerButton = document.getElementById('summarizer-button');
+    if (summarizerButton.disabled) {
+      return; // Prevent multiple clicks while processing
+    }
+
+    summarizerButton.disabled = true;
+    summarizerButton.textContent = 'Summarizing...';
+
+    console.log("Calling summarizeText function");
+    summarizeText(selectedText, wordCount, apiKey)
+      .then(summary => {
+        console.log("Summary received, showing summary window");
+        showSummaryWindow(summary);
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        alert(`An error occurred while summarizing the text: ${error.message}`);
+      })
+      .finally(() => {
+        summarizerButton.disabled = false;
+        summarizerButton.textContent = 'S';
+      });
   }
 
   function showMessage(message) {
@@ -91,6 +113,7 @@
   }
 
   function showSummaryWindow(summary) {
+    console.log("Creating summary window");
     const summaryWindow = document.createElement('div');
     summaryWindow.id = 'summarizer-summary-window';
     summaryWindow.innerHTML = `
@@ -101,8 +124,29 @@
       <button id="summarizer-summary-close">Close</button>
       <button id="summarizer-read-aloud">Read Aloud</button>
       <button id="summarizer-export">Export</button>
+      <div class="resize-handle"></div>
     `;
+    
+    // Add inline styles to ensure visibility and resizability
+    summaryWindow.style.cssText = `
+      position: fixed;
+      top: 50px;
+      left: 50px;
+      width: 300px;
+      height: 400px;
+      background-color: white;
+      border: 1px solid black;
+      padding: 10px;
+      z-index: 9999;
+      overflow-y: auto;
+      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+      resize: both;
+      overflow: auto;
+    `;
+    
     document.body.appendChild(summaryWindow);
+
+    console.log("Summary window created and appended to body");
 
     makeDraggable(summaryWindow);
     makeResizable(summaryWindow);
@@ -110,6 +154,8 @@
     document.getElementById('summarizer-summary-close').addEventListener('click', closeSummaryWindow);
     document.getElementById('summarizer-read-aloud').addEventListener('click', () => readAloud(summary));
     document.getElementById('summarizer-export').addEventListener('click', () => exportSummary(summary));
+
+    console.log("Event listeners added to summary window buttons");
   }
 
   function closeSummaryWindow() {
@@ -128,62 +174,73 @@
   }
 
   function makeDraggable(element) {
-    let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
-    const handle = element.querySelector('.draggable-handle') || element;
-    
-    handle.onmousedown = dragMouseDown;
-
-    function dragMouseDown(e) {
-      e.preventDefault();
-      pos3 = e.clientX;
-      pos4 = e.clientY;
-      document.onmouseup = closeDragElement;
-      document.onmousemove = elementDrag;
+    console.log("Making element draggable:", element);
+    const handle = element.querySelector('.draggable-handle');
+    if (!handle) {
+      console.error("Draggable handle not found");
+      return;
     }
 
-    function elementDrag(e) {
-      e.preventDefault();
-      pos1 = pos3 - e.clientX;
-      pos2 = pos4 - e.clientY;
-      pos3 = e.clientX;
-      pos4 = e.clientY;
-      element.style.top = (element.offsetTop - pos2) + "px";
-      element.style.left = (element.offsetLeft - pos1) + "px";
+    let isDragging = false;
+    let startX, startY, startLeft, startTop;
+
+    handle.addEventListener('mousedown', startDragging);
+
+    function startDragging(e) {
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      startLeft = parseInt(window.getComputedStyle(element).left);
+      startTop = parseInt(window.getComputedStyle(element).top);
+      document.addEventListener('mousemove', drag);
+      document.addEventListener('mouseup', stopDragging);
     }
 
-    function closeDragElement() {
-      document.onmouseup = null;
-      document.onmousemove = null;
+    function drag(e) {
+      if (!isDragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      element.style.left = `${startLeft + dx}px`;
+      element.style.top = `${startTop + dy}px`;
+    }
+
+    function stopDragging() {
+      isDragging = false;
+      document.removeEventListener('mousemove', drag);
+      document.removeEventListener('mouseup', stopDragging);
     }
   }
 
   function makeResizable(element) {
-    const resizer = document.createElement('div');
-    resizer.className = 'resizer';
-    resizer.style.width = '10px';
-    resizer.style.height = '10px';
-    resizer.style.background = 'red';
-    resizer.style.position = 'absolute';
-    resizer.style.right = '0';
-    resizer.style.bottom = '0';
-    resizer.style.cursor = 'se-resize';
-    element.appendChild(resizer);
+    const resizeHandle = element.querySelector('.resize-handle');
+    let isResizing = false;
+    let originalWidth, originalHeight, originalX, originalY;
 
-    resizer.addEventListener('mousedown', initResize, false);
+    resizeHandle.addEventListener('mousedown', startResize);
 
-    function initResize(e) {
-      window.addEventListener('mousemove', resize, false);
-      window.addEventListener('mouseup', stopResize, false);
+    function startResize(e) {
+      isResizing = true;
+      originalWidth = parseFloat(getComputedStyle(element, null).getPropertyValue('width').replace('px', ''));
+      originalHeight = parseFloat(getComputedStyle(element, null).getPropertyValue('height').replace('px', ''));
+      originalX = e.pageX;
+      originalY = e.pageY;
+      document.addEventListener('mousemove', resize);
+      document.addEventListener('mouseup', stopResize);
+      e.preventDefault();
     }
 
     function resize(e) {
-      element.style.width = (e.clientX - element.offsetLeft) + 'px';
-      element.style.height = (e.clientY - element.offsetTop) + 'px';
+      if (!isResizing) return;
+      const width = originalWidth + (e.pageX - originalX);
+      const height = originalHeight + (e.pageY - originalY);
+      element.style.width = width + 'px';
+      element.style.height = height + 'px';
     }
 
-    function stopResize(e) {
-      window.removeEventListener('mousemove', resize, false);
-      window.removeEventListener('mouseup', stopResize, false);
+    function stopResize() {
+      isResizing = false;
+      document.removeEventListener('mousemove', resize);
+      document.removeEventListener('mouseup', stopResize);
     }
   }
 
@@ -211,48 +268,48 @@
     }
   }
 
-  async function summarizeText(text, length) {
-    const apiKey = document.getElementById('openai-api-key').value;
-    if (!apiKey) {
-      return 'Please enter your OpenAI API key in the text field above the "S" button.';
-    }
+  async function summarizeText(text, length, apiKey) {
+    const apiUrl = 'https://api.openai.com/v1/chat/completions';
+    
+    const prompt = `Summarize the following text in approximately ${length} words:\n\n${text}`;
 
     try {
-      const apiUrl = 'https://api.openai.com/v1/chat/completions';
-      const prompt = `Summarize the following text in approximately ${length} words:\n\n${text}`;
-
-      const apiResponse = await fetch(apiUrl, {
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: 'gpt-4',
+          model: 'gpt-4o-mini',
           messages: [
             { role: 'system', content: 'You are a helpful assistant that summarizes text.' },
             { role: 'user', content: prompt }
           ],
-          max_tokens: length * 2,
+          max_tokens: parseInt(length) * 2,
           n: 1,
           stop: null,
           temperature: 0.7,
         })
       });
 
-      if (!apiResponse.ok) {
-        if (apiResponse.status === 401) {
-          throw new Error('Invalid API key. Please check your OpenAI API key and try again.');
-        } else {
-          throw new Error(`HTTP error! status: ${apiResponse.status}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage;
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error?.message || response.statusText;
+        } catch (e) {
+          errorMessage = errorText || response.statusText;
         }
+        throw new Error(`API error: ${errorMessage}`);
       }
 
-      const data = await apiResponse.json();
+      const data = await response.json();
       return data.choices[0].message.content.trim();
     } catch (error) {
-      console.error('Error calling OpenAI API:', error);
-      return `An error occurred while generating the summary: ${error.message}. Please check your API key and try again.`;
+      console.error('Error in summarizeText:', error);
+      throw error;
     }
   }
 
@@ -382,3 +439,32 @@
   console.log("Content script loaded");
 
 })();
+
+async function retryWithBackoff(operation, maxRetries = 5, initialDelay = 2000) {
+  let delay = initialDelay;
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (i === maxRetries - 1 || !error.message.includes('Rate limit exceeded')) throw error;
+      console.log(`Attempt ${i + 1} failed, retrying in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      delay *= 2; // exponential backoff
+    }
+  }
+}
+
+// Add this CSS to your existing styles or inject it into the page
+const style = document.createElement('style');
+style.textContent = `
+  .resize-handle {
+    width: 10px;
+    height: 10px;
+    background-color: #ccc;
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    cursor: se-resize;
+  }
+`;
+document.head.appendChild(style);
