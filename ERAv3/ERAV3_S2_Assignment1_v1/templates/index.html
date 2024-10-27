@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ImageSelector and MetaData extractor</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>ImageSelector and MetaData extractor</h1>
+        <div class="box-container">
+            <div class="box">
+                <h2>Image Selector</h2>
+                <div class="animal-selector">
+                    <label><input type="radio" name="animal" value="cat"> Cat</label>
+                    <label><input type="radio" name="animal" value="dog"> Dog</label>
+                    <label><input type="radio" name="animal" value="elephant"> Elephant</label>
+                </div>
+                <div id="animal-image"></div>
+            </div>
+            <div class="box">
+                <h2>Metadata Extractor</h2>
+                <input type="file" id="file-upload">
+                <button onclick="uploadFile()">Upload</button>
+                <div id="file-info"></div>
+            </div>
+        </div>
+    </div>
+    <div class="background-selector">
+        <label for="background-select">Choose background:</label>
+        <select id="background-select" onchange="changeBackground()">
+            <option value="default">Default</option>
+            <option value="stars">Stars</option>
+            <option value="bubbles">Bubbles</option>
+            <option value="rainbow">Rainbow</option>
+        </select>
+    </div>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
