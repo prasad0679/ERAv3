@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>File Display</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="header-container">
+            <h1>File Processing Results</h1>
+            <div class="home-link">
+                <a href="#" onclick="cleanupAndGoHome(event)">Go to Home</a>
+            </div>
+        </div>
+        
+        <div class="content-grid">
+            <!-- Original Content -->
+            <div class="content-box">
+                <h2>Original Content</h2>
+                <div class="display-area">
+                    {% if file_type == 'text' %}
+                        <pre class="text-content">{{ data }}</pre>
+                    {% elif file_type == 'image' %}
+                        <img src="{{ data.image_url }}" alt="Uploaded image">
+                    {% elif file_type == 'audio' %}
+                        <audio controls>
+                            <source src="{{ url_for('static', filename='uploads/' + filename) }}" type="audio/wav">
+                            Your browser does not support the audio element.
+                        </audio>
+                    {% elif file_type == '3d' %}
+                        <div id="3d-viewer">
+                            3D Viewer Placeholder
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Preprocessed Content -->
+            <div class="content-box">
+                <h2>Preprocessed Content</h2>
+                <button onclick="processData('preprocess')" class="action-button">Preprocess</button>
+                <div class="display-area scrollable" id="preprocess-area">
+                    <div class="placeholder-text">Click 'Preprocess' to see results</div>
+                </div>
+            </div>
+
+            <!-- Augmented Content -->
+            <div class="content-box">
+                <h2>Augmented Content</h2>
+                <button onclick="processData('augment')" class="action-button">Augment</button>
+                <div class="display-area scrollable" id="augment-area">
+                    <div class="placeholder-text">Click 'Augment' to see results</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function cleanupAndGoHome(event) {
+            event.preventDefault();
+            
+            // Call cleanup endpoint
+            fetch('/cleanup', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                    'filename': '{{ filename }}'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Cleanup response:', data);
+                // Redirect to home page after cleanup
+                window.location.href = '{{ url_for("index") }}';
+            })
+            .catch(error => {
+                console.error('Error during cleanup:', error);
+                // Redirect anyway
+                window.location.href = '{{ url_for("index") }}';
+            });
+        }
+
+        function processData(operation) {
+            console.log('Processing:', operation);
+            fetch('/process', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                    'filename': '{{ filename }}',
+                    'file_type': '{{ file_type }}',
+                    'operation': operation
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Response data:', data);
+                const targetArea = operation === 'preprocess' ? 
+                    'preprocess-area' : 'augment-area';
+                const resultArea = document.getElementById(targetArea);
+                
+                if ('{{ file_type }}' === 'text') {
+                    // For text files, show only the processed text
+                    let html = '<div class="text-content">';
+                    if (operation === 'preprocess') {
+                        // Show preprocessed lines
+                        html += data.result.processed_lines.join('\n');
+                    } else {
+                        // Show augmented text
+                        const augmentations = data.result.augmentations;
+                        for (const [type, lines] of Object.entries(augmentations)) {
+                            html += lines.join('\n') + '\n';
+                        }
+                    }
+                    html += '</div>';
+                    resultArea.innerHTML = html;
+                } else if ('{{ file_type }}' === 'audio') {
+                    // Display audio players for both preprocessed and augmented audio
+                    let html = '<div class="audio-results">';
+                    Object.entries(data.result).forEach(([key, result]) => {
+                        if (key !== 'labels' && key !== 'error' && result.audio_path) {
+                            html += `
+                                <div class="audio-result">
+                                    <audio controls>
+                                        <source src="/static/${result.audio_path}" type="audio/wav">
+                                        Your browser does not support the audio element.
+                                    </audio>
+                                </div>
+                            `;
+                        }
+                    });
+                    html += '</div>';
+                    resultArea.innerHTML = html;
+                } else if ('{{ file_type }}' === 'image') {
+                    // Display image results
+                    let html = '<div class="preprocessed-images">';
+                    for (const [name, result] of Object.entries(data.result)) {
+                        if (name !== 'labels' && name !== 'error') {
+                            html += `
+                                <div class="preprocess-result">
+                                    <h3>${name}</h3>
+                                    <img src="${result.image_data}" alt="${name}">
+                                </div>
+                            `;
+                        }
+                    }
+                    html += '</div>';
+                    resultArea.innerHTML = html;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                const targetArea = operation === 'preprocess' ? 
+                    'preprocess-area' : 'augment-area';
+                document.getElementById(targetArea).innerHTML = 
+                    `<div class="error">Error processing file: ${error.message}</div>`;
+            });
+        }
+    </script>
+</body>
+</html> 

@@ -1,0 +1,10 @@
+flask
+torch
+torchvision
+torchaudio
+pillow
+soundfile
+trimesh
+numpy
+nltk
+textblob

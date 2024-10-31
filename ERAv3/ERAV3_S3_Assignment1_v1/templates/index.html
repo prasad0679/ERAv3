@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>File Processing App</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <h1>File Processing Application</h1>
+        <div class="upload-form">
+            <form action="{{ url_for('upload_file') }}" method="post" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="file_type">Select File Type:</label>
+                    <select name="file_type" id="file_type" required>
+                        <option value="" disabled selected>Choose file type...</option>
+                        <option value="text">Text File</option>
+                        <option value="image">Image File</option>
+                        <option value="audio">Audio File</option>
+                        <option value="3d">3D File</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="file">Select File:</label>
+                    <input type="file" name="file" id="file" required>
+                </div>
+                
+                <div class="form-group">
+                    <button type="submit">Upload</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html> 
