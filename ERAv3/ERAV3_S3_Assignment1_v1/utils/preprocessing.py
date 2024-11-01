@@ -9,6 +9,10 @@ import torchaudio
 import torchaudio.transforms as T
 import json
 import os
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')  # Use Agg backend
+from utils.visualization import visualize_3d_mesh
 
 class TextDataset(Dataset):
     def __init__(self, text_data):
@@ -54,10 +58,17 @@ class ImagePreprocessor:
                 transforms.ToTensor(),
             ])
         }
+        self.transform_descriptions = {
+            'resize': 'Image Resized To Standard Resolution (224x224)',
+            'normalize': 'Image Normalized Using ImageNet Standards',
+            'grayscale': 'Image Converted To Grayscale Format',
+            'color_jitter': 'Image Colors Enhanced For Better Visibility'
+        }
 
     def preprocess_image(self, image):
         # Apply all transforms and return results
         results = {}
+        results['labels'] = self.transform_descriptions
         
         # Convert PIL image to RGB if it's in a different mode
         if image.mode != 'RGB':
@@ -124,6 +135,22 @@ class AudioPreprocessor:
         except Exception as e:
             print(f"Error padding audio: {str(e)}")
             return waveform
+
+    def create_waveform_plot(self, waveform, sample_rate, title="Waveform"):
+        plt.figure(figsize=(10, 4))
+        plt.plot(waveform.t().numpy())
+        plt.title(title)
+        plt.xlabel("Sample")
+        plt.ylabel("Amplitude")
+        plt.grid(True)
+        
+        # Save plot to a base64 string
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', bbox_inches='tight')
+        plt.close()
+        buf.seek(0)
+        plot_data = base64.b64encode(buf.getvalue()).decode('utf-8')
+        return f'data:image/png;base64,{plot_data}'
 
     def preprocess_audio(self, audio_data, filename):
         results = {}
@@ -203,16 +230,152 @@ class AudioPreprocessor:
                 }
                 print("Denoised audio saved")
 
+            # Add visualization for original waveform
+            results['original']['plot'] = self.create_waveform_plot(
+                waveform, 
+                original_sr, 
+                "Original Waveform"
+            )
+
+            # After resampling
+            if 'resampled' in results:
+                results['resampled']['plot'] = self.create_waveform_plot(
+                    waveform, 
+                    self.sample_rate, 
+                    "Resampled Waveform"
+                )
+
+            # After padding
+            if 'padded' in results:
+                results['padded']['plot'] = self.create_waveform_plot(
+                    waveform, 
+                    self.sample_rate, 
+                    "Padded Waveform"
+                )
+
+            # After denoising
+            if 'denoised' in results:
+                results['denoised']['plot'] = self.create_waveform_plot(
+                    denoised, 
+                    self.sample_rate, 
+                    "Denoised Waveform"
+                )
+
             # Add labels for each version
             results['labels'] = {
-                'original': 'Original Audio',
-                'resampled': f'Resampled to {self.sample_rate}Hz',
-                'padded': 'Padded Audio',
-                'denoised': 'Denoised Audio'
+                'original': 'Original Audio Signal',
+                'resampled': f'Audio Resampled To {self.sample_rate}Hz For Better Quality',
+                'padded': 'Audio Padded To Standard Length',
+                'denoised': 'Audio With Reduced Background Noise'
             }
 
         except Exception as e:
             print(f"Error in audio preprocessing: {str(e)}")
+            results['error'] = str(e)
+
+        return results
+
+# Add this class for 3D preprocessing
+class MeshPreprocessor:
+    def __init__(self):
+        self.transform_descriptions = {
+            'normalized': 'Mesh Scaled To Unit Sphere',
+            'centered': 'Mesh Centered At Origin'
+        }
+
+    def normalize_mesh(self, vertices):
+        """Scale mesh to unit sphere"""
+        # Calculate center and scale
+        center = torch.mean(vertices, dim=0)
+        vertices = vertices - center
+        scale = torch.max(torch.norm(vertices, dim=1))
+        vertices = vertices / scale
+        return vertices
+
+    def center_mesh(self, vertices):
+        """Center mesh at origin"""
+        center = torch.mean(vertices, dim=0)
+        return vertices - center
+
+    def create_mesh_visualization(self, vertices, faces, title):
+        """Create visualization with adjusted size"""
+        fig = plt.figure(figsize=(8, 8))  # Adjusted figure size
+        ax = fig.add_subplot(111, projection='3d')
+        
+        # Plot the mesh surface
+        surf = ax.plot_trisurf(vertices[:, 0], vertices[:, 1], vertices[:, 2],
+                             triangles=faces,
+                             cmap='viridis',
+                             alpha=0.4)
+        
+        # Plot vertices as red points
+        ax.scatter(vertices[:, 0], vertices[:, 1], vertices[:, 2], 
+                  color='red', 
+                  s=50,
+                  alpha=1.0,
+                  label='Vertices')
+        
+        # Plot edges
+        for face in faces:
+            points = vertices[face]
+            for i in range(3):
+                p1 = points[i]
+                p2 = points[(i + 1) % 3]
+                ax.plot([p1[0], p2[0]], 
+                       [p1[1], p2[1]], 
+                       [p1[2], p2[2]], 
+                       color='#0066FF',
+                       linewidth=4.0,
+                       alpha=1.0)
+        
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        ax.set_title(title)
+        ax.legend(['Surface', 'Vertices', 'Edges'])
+        ax.view_init(elev=30, azim=45)
+        
+        # Save plot to base64 string
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', bbox_inches='tight', dpi=100)
+        plt.close()
+        buf.seek(0)
+        plot_data = base64.b64encode(buf.getvalue()).decode('utf-8')
+        return f'data:image/png;base64,{plot_data}'
+
+    def preprocess_mesh(self, vertices, faces):
+        results = {}
+        results['labels'] = self.transform_descriptions
+
+        try:
+            # Normalize mesh
+            normalized_vertices = self.normalize_mesh(vertices)
+            normalized_plot = self.create_mesh_visualization(
+                normalized_vertices.numpy(), 
+                faces.numpy(), 
+                "Normalized Mesh"
+            )
+            results['normalized'] = {
+                'vertices': normalized_vertices.numpy().tolist(),  # Convert to list
+                'faces': faces.numpy().tolist(),  # Convert to list
+                'plot': normalized_plot
+            }
+
+            # Center mesh
+            centered_vertices = self.center_mesh(vertices)
+            centered_plot = self.create_mesh_visualization(
+                centered_vertices.numpy(), 
+                faces.numpy(), 
+                "Centered Mesh"
+            )
+            results['centered'] = {
+                'vertices': centered_vertices.numpy().tolist(),  # Convert to list
+                'faces': faces.numpy().tolist(),  # Convert to list
+                'plot': centered_plot
+            }
+
+        except Exception as e:
+            print(f"Error in mesh preprocessing: {str(e)}")
             results['error'] = str(e)
 
         return results
@@ -235,8 +398,10 @@ def preprocess_data(data, file_type, filename=None):
         processed_result = {
             'original_text': data,
             'processed_lines': dataset.lines,
-            'tensor_representation': [tensor.tolist() for tensor in dataset.tensors],
-            'num_lines': len(dataset)
+            'labels': {
+                'original': 'Original Text Content',
+                'processed': 'Text Converted To Lowercase For Standardization'
+            }
         }
         return processed_result
     
@@ -254,5 +419,7 @@ def preprocess_data(data, file_type, filename=None):
         return preprocessor.preprocess_audio(data, filename)
     
     elif file_type == '3d':
-        # Add your 3D file preprocessing code here
-        return data
+        preprocessor = MeshPreprocessor()
+        vertices = data['vertices']
+        faces = data['faces']
+        return preprocessor.preprocess_mesh(vertices, faces)

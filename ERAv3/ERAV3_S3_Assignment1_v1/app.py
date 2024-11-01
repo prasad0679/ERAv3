@@ -9,6 +9,10 @@ import trimesh
 import base64
 from io import BytesIO
 import torchaudio
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+import numpy as np
+from utils.visualization import visualize_3d_mesh
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
@@ -20,7 +24,7 @@ ALLOWED_EXTENSIONS = {
     'text': {'txt', 'csv', 'json'},
     'image': {'png', 'jpg', 'jpeg'},
     'audio': {'wav', 'mp3'},
-    '3d': {'obj', 'stl', 'ply'}
+    '3d': {'obj', 'stl', 'ply', 'off'}
 }
 
 def allowed_file(filename, file_type):
@@ -72,19 +76,28 @@ def upload_file():
 
 @app.route('/process', methods=['POST'])
 def process_data():
-    filename = request.form.get('filename')
-    file_type = request.form.get('file_type')
-    operation = request.form.get('operation')
-    
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    data = load_file(filepath, file_type)
-    
-    if operation == 'preprocess':
-        result = preprocess_data(data, file_type, filename)
-    else:  # augment
-        result = augment_data(data, file_type, filename)
-    
-    return jsonify({'result': result})
+    try:
+        filename = request.form.get('filename')
+        file_type = request.form.get('file_type')
+        operation = request.form.get('operation')
+        
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        data = load_file(filepath, file_type)
+        
+        if operation == 'preprocess':
+            result = preprocess_data(data, file_type, filename)
+        else:  # augment
+            result = augment_data(data, file_type, filename)
+        
+        # Ensure we're returning valid JSON
+        if result is None:
+            return jsonify({'error': 'Processing failed'})
+            
+        return jsonify({'result': result})
+        
+    except Exception as e:
+        print(f"Error in process_data: {str(e)}")  # Debug print
+        return jsonify({'error': str(e)})
 
 @app.route('/cleanup', methods=['POST'])
 def cleanup():
@@ -121,10 +134,19 @@ def load_file(filepath, file_type):
         try:
             print(f"Loading audio file: {filepath}")
             waveform, sr = torchaudio.load(filepath)
-            return {'audio': waveform.numpy(), 'sample_rate': sr}
+            
+            # Create visualization for original audio
+            from utils.preprocessing import AudioPreprocessor
+            preprocessor = AudioPreprocessor()
+            plot = preprocessor.create_waveform_plot(waveform, sr, "Original Audio Signal")
+            
+            return {
+                'audio': waveform.numpy(), 
+                'sample_rate': sr,
+                'plot': plot
+            }
         except Exception as e:
             print(f"Error loading audio file: {str(e)}")
-            # Fallback to soundfile if torchaudio fails
             try:
                 audio, sr = sf.read(filepath)
                 return {'audio': audio, 'sample_rate': sr}
@@ -133,11 +155,24 @@ def load_file(filepath, file_type):
                 return None
     
     elif file_type == '3d':
-        mesh = trimesh.load(filepath)
-        return {
-            'vertices': mesh.vertices.tolist(),
-            'faces': mesh.faces.tolist()
-        }
+        try:
+            # Load the mesh using trimesh
+            mesh = trimesh.load(filepath)
+            vertices = torch.tensor(mesh.vertices, dtype=torch.float)
+            faces = torch.tensor(mesh.faces, dtype=torch.long)
+            
+            # Create visualization
+            plot = visualize_3d_mesh(mesh.vertices, mesh.faces)
+            
+            return {
+                'vertices': vertices,
+                'faces': faces,
+                'plot': plot,
+                'label': "3D Mesh Visualization"
+            }
+        except Exception as e:
+            print(f"Error loading 3D file: {str(e)}")
+            return None
 
 if __name__ == '__main__':
     app.run(debug=True, host='127.0.0.1', port=5000) 

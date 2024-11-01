@@ -23,13 +23,23 @@
                     {% elif file_type == 'image' %}
                         <img src="{{ data.image_url }}" alt="Uploaded image">
                     {% elif file_type == 'audio' %}
-                        <audio controls>
-                            <source src="{{ url_for('static', filename='uploads/' + filename) }}" type="audio/wav">
-                            Your browser does not support the audio element.
-                        </audio>
+                        <div class="audio-container">
+                            <audio controls>
+                                <source src="{{ url_for('static', filename='uploads/' + filename) }}" type="audio/wav">
+                                Your browser does not support the audio element.
+                            </audio>
+                            {% if data.plot %}
+                                <div class="waveform-plot">
+                                    <img src="{{ data.plot }}" alt="Audio Waveform">
+                                </div>
+                            {% endif %}
+                        </div>
                     {% elif file_type == '3d' %}
-                        <div id="3d-viewer">
-                            3D Viewer Placeholder
+                        <div class="mesh-container">
+                            <h3 class="process-title">{{ data.label }}</h3>
+                            <div class="mesh-plot">
+                                <img src="{{ data.plot }}" alt="3D Mesh Visualization">
+                            </div>
                         </div>
                     {% endif %}
                 </div>
@@ -58,8 +68,6 @@
     <script>
         function cleanupAndGoHome(event) {
             event.preventDefault();
-            
-            // Call cleanup endpoint
             fetch('/cleanup', {
                 method: 'POST',
                 headers: {
@@ -72,12 +80,10 @@
             .then(response => response.json())
             .then(data => {
                 console.log('Cleanup response:', data);
-                // Redirect to home page after cleanup
                 window.location.href = '{{ url_for("index") }}';
             })
             .catch(error => {
                 console.error('Error during cleanup:', error);
-                // Redirect anyway
                 window.location.href = '{{ url_for("index") }}';
             });
         }
@@ -106,28 +112,36 @@
                     // For text files, show only the processed text
                     let html = '<div class="text-content">';
                     if (operation === 'preprocess') {
-                        // Show preprocessed lines
+                        // Show preprocessed lines with title
+                        html += `<h3 class="process-title">${data.result.labels.processed}</h3>`;
                         html += data.result.processed_lines.join('\n');
                     } else {
-                        // Show augmented text
+                        // Show augmented text with titles
                         const augmentations = data.result.augmentations;
                         for (const [type, lines] of Object.entries(augmentations)) {
-                            html += lines.join('\n') + '\n';
+                            html += `<h3 class="process-title">${data.result.labels[type]}</h3>`;
+                            html += lines.join('\n') + '\n\n';
                         }
                     }
                     html += '</div>';
                     resultArea.innerHTML = html;
                 } else if ('{{ file_type }}' === 'audio') {
-                    // Display audio players for both preprocessed and augmented audio
+                    // Display audio players and waveform plots
                     let html = '<div class="audio-results">';
                     Object.entries(data.result).forEach(([key, result]) => {
                         if (key !== 'labels' && key !== 'error' && result.audio_path) {
                             html += `
                                 <div class="audio-result">
+                                    <h3 class="process-title">${data.result.labels[key]}</h3>
                                     <audio controls>
                                         <source src="/static/${result.audio_path}" type="audio/wav">
                                         Your browser does not support the audio element.
                                     </audio>
+                                    ${result.plot ? `
+                                        <div class="waveform-plot">
+                                            <img src="${result.plot}" alt="Waveform Plot">
+                                        </div>
+                                    ` : ''}
                                 </div>
                             `;
                         }
@@ -141,8 +155,25 @@
                         if (name !== 'labels' && name !== 'error') {
                             html += `
                                 <div class="preprocess-result">
-                                    <h3>${name}</h3>
+                                    <h3 class="process-title">${data.result.labels[name]}</h3>
                                     <img src="${result.image_data}" alt="${name}">
+                                </div>
+                            `;
+                        }
+                    }
+                    html += '</div>';
+                    resultArea.innerHTML = html;
+                } else if ('{{ file_type }}' === '3d') {
+                    // Display 3D mesh results
+                    let html = '<div class="mesh-results">';
+                    for (const [name, result] of Object.entries(data.result)) {
+                        if (name !== 'labels' && name !== 'error') {
+                            html += `
+                                <div class="mesh-result">
+                                    <h3 class="process-title">${data.result.labels[name]}</h3>
+                                    <div class="mesh-plot">
+                                        <img src="${result.plot}" alt="3D Mesh Visualization">
+                                    </div>
                                 </div>
                             `;
                         }

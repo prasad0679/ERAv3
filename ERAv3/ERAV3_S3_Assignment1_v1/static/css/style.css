@@ -79,7 +79,7 @@ button:hover {
     grid-template-columns: repeat(3, 1fr);
     gap: 20px;
     margin-top: 20px;
-    height: calc(100vh - 150px);
+    height: 700px;
 }
 
 .content-box {
@@ -87,18 +87,18 @@ button:hover {
     padding: 20px;
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    display: flex;
-    flex-direction: column;
-    height: 100%;
+    height: 700px;
+    overflow: hidden;
 }
 
 .display-area {
-    flex: 1;
+    height: 600px;
     padding: 15px;
     background-color: #f8f9fa;
     border: 1px solid #ddd;
     border-radius: 4px;
-    overflow: auto;
+    overflow-y: auto;
+    overflow-x: auto;
 }
 
 /* Audio results */
@@ -109,6 +109,7 @@ button:hover {
 }
 
 .audio-result {
+    margin-bottom: 15px;
     padding: 10px;
     background: white;
     border-radius: 4px;
@@ -117,6 +118,7 @@ button:hover {
 
 .audio-result audio {
     width: 100%;
+    margin: 5px 0;
 }
 
 /* Image results */
@@ -329,4 +331,145 @@ h1 {
     color: #2196F3;
     font-size: 24px;
     margin: 0;  /* Remove margin as it's handled by header-container */
+}
+
+/* Update the content grid and display area styles */
+.content-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    margin-top: 20px;
+    height: 700px;
+}
+
+.content-box {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    height: 700px;
+    overflow: hidden;
+}
+
+.display-area {
+    height: 600px;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    overflow-y: auto;
+    overflow-x: auto;
+}
+
+/* Update audio container and waveform plot styles */
+.audio-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.waveform-plot {
+    width: 100%;
+    max-height: 200px;
+    overflow: hidden;
+}
+
+.waveform-plot img {
+    width: 100%;
+    height: auto;
+    object-fit: contain;
+}
+
+.audio-result {
+    margin-bottom: 15px;
+    padding: 10px;
+    background: white;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+}
+
+.audio-result audio {
+    width: 100%;
+    margin: 5px 0;
+}
+
+/* Update process title style */
+.process-title {
+    color: #2196F3;
+    font-size: 14px;  /* Reduced from 16px */
+    font-weight: bold;
+    margin: 10px 0 8px 0;  /* Slightly reduced margins */
+    padding-bottom: 4px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+/* Add 3D mesh visualization styles */
+.mesh-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    height: 100%;  /* Take full height of parent */
+}
+
+.mesh-plot {
+    width: 100%;
+    height: calc(100% - 40px);  /* Full height minus title space */
+    background: white;
+    padding: 10px;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mesh-plot img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    display: block;
+}
+
+/* Add 3D mesh results styling */
+.mesh-results {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.mesh-result {
+    background: white;
+    padding: 15px;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+}
+
+.mesh-plot {
+    width: 100%;
+    max-height: 300px;
+    overflow: hidden;
+    margin-top: 10px;
+}
+
+.mesh-plot img {
+    width: 100%;
+    height: auto;
+    object-fit: contain;
+}
+
+/* Update display area for better 3D visualization */
+.display-area {
+    height: calc(100% - 60px);  /* Adjust height to leave space for title */
+    padding: 15px;
+    background-color: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    overflow-y: auto;
+    overflow-x: auto;
+}
+
+/* Ensure content box has enough height */
+.content-box {
+    height: 800px;  /* Increased height */
+    min-height: 800px;  /* Ensure minimum height */
 }

@@ -8,3 +8,5 @@ trimesh
 numpy
 nltk
 textblob
+matplotlib
+pytorch3d

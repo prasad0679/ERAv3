@@ -12,6 +12,10 @@ import base64
 import torchaudio
 import torchaudio.transforms as T
 import os
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')  # Use Agg backend
+from utils.visualization import visualize_3d_mesh
 
 # Text augmentation setup
 try:
@@ -22,12 +26,6 @@ except LookupError:
 
 class TextAugmenter:
     def __init__(self):
-        # Initialize translation models
-        # Commenting out back-translation model initialization
-        # self.en_fr_model = MarianMTModel.from_pretrained('Helsinki-NLP/opus-mt-en-fr')
-        # self.fr_en_model = MarianMTModel.from_pretrained('Helsinki-NLP/opus-mt-fr-en')
-        # self.en_fr_tokenizer = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-fr')
-        # self.fr_en_tokenizer = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-fr-en')
         pass
 
     def get_synonyms(self, word):
@@ -66,21 +64,29 @@ class TextAugmenter:
             
         return ' '.join(new_words)
 
-    # Commenting out back-translation method
-    # def back_translation(self, text):
-    #     # English to French
-    #     en_fr_inputs = self.en_fr_tokenizer(text, return_tensors="pt", padding=True)
-    #     with torch.no_grad():
-    #         en_fr_outputs = self.en_fr_model.generate(**en_fr_inputs)
-    #     fr_text = self.en_fr_tokenizer.decode(en_fr_outputs[0], skip_special_tokens=True)
-    #     
-    #     # French back to English
-    #     fr_en_inputs = self.fr_en_tokenizer(fr_text, return_tensors="pt", padding=True)
-    #     with torch.no_grad():
-    #         fr_en_outputs = self.fr_en_model.generate(**fr_en_inputs)
-    #     back_translated = self.fr_en_tokenizer.decode(fr_en_outputs[0], skip_special_tokens=True)
-    #     
-    #     return back_translated
+    def augment_text(self, data):
+        lines = data.strip().split('\n')
+        
+        augmented_results = {
+            'original_text': data,
+            'augmentations': {
+                'synonym_replacement': [],
+                'random_insertion': [],
+            },
+            'labels': {
+                'synonym_replacement': 'Text With Words Replaced By Their Synonyms',
+                'random_insertion': 'Text With Additional Words For Context Enhancement'
+            }
+        }
+        
+        for line in lines:
+            syn_replaced = self.synonym_replacement(line, n=2)
+            random_inserted = self.random_insertion(line, n=2)
+            
+            augmented_results['augmentations']['synonym_replacement'].append(syn_replaced)
+            augmented_results['augmentations']['random_insertion'].append(random_inserted)
+        
+        return augmented_results
 
 class ImageAugmenter:
     def __init__(self):
@@ -111,10 +117,19 @@ class ImageAugmenter:
                 transforms.ToTensor(),
             ])
         }
+        self.transform_descriptions = {
+            'horizontal_flip': 'Image Flipped Left To Right',
+            'vertical_flip': 'Image Flipped Top To Bottom',
+            'rotation': 'Image Rotated By 30 Degrees',
+            'color_jitter': 'Image Colors Randomly Adjusted',
+            'random_crop': 'Image Randomly Cropped And Resized',
+            'gaussian_blur': 'Image Smoothed With Gaussian Blur'
+        }
 
     def augment_image(self, image):
         # Apply all transforms and return results
         results = {}
+        results['labels'] = self.transform_descriptions
         
         # Convert PIL image to RGB if it's in a different mode
         if image.mode != 'RGB':
@@ -296,12 +311,48 @@ class AudioAugmenter:
 
             # Add descriptions
             results['labels'] = {
-                'original': 'Original Audio',
-                'time_stretched': 'Time Stretched (20% slower)',
-                'pitch_shifted': 'Pitch Shifted (2 steps up)',
-                'noisy': 'Added Gaussian Noise',
-                'reversed': 'Reversed Audio'
+                'original': 'Original Audio Signal',
+                'time_stretched': 'Audio Slowed Down By 20%',
+                'pitch_shifted': 'Audio Pitch Raised By 2 Steps',
+                'noisy': 'Audio With Added Random Noise',
+                'reversed': 'Audio Played In Reverse'
             }
+
+            # Add visualization for original waveform
+            results['original']['plot'] = create_waveform_plot(
+                waveform, 
+                self.sample_rate, 
+                "Original Waveform"
+            )
+
+            # Add plots for each augmentation
+            if 'time_stretched' in results:
+                results['time_stretched']['plot'] = create_waveform_plot(
+                    stretched, 
+                    self.sample_rate, 
+                    "Time Stretched Waveform"
+                )
+
+            if 'pitch_shifted' in results:
+                results['pitch_shifted']['plot'] = create_waveform_plot(
+                    pitched, 
+                    self.sample_rate, 
+                    "Pitch Shifted Waveform"
+                )
+
+            if 'noisy' in results:
+                results['noisy']['plot'] = create_waveform_plot(
+                    noisy, 
+                    self.sample_rate, 
+                    "Noisy Waveform"
+                )
+
+            if 'reversed' in results:
+                results['reversed']['plot'] = create_waveform_plot(
+                    reversed_audio, 
+                    self.sample_rate, 
+                    "Reversed Waveform"
+                )
 
         except Exception as e:
             print(f"Error in audio augmentation: {str(e)}")
@@ -309,44 +360,96 @@ class AudioAugmenter:
 
         return results
 
+# Add this class for 3D augmentation
+class MeshAugmenter:
+    def __init__(self):
+        self.transform_descriptions = {
+            'rotated': 'Mesh Rotated By 45 Degrees Around Y-Axis',
+            'scaled': 'Mesh Scaled By Factor Of 1.5',
+            'noisy': 'Mesh With Added Random Vertex Noise'
+        }
+
+    def rotate_mesh(self, vertices, angle_degrees=45):
+        """Rotate mesh around Y-axis"""
+        angle_rad = torch.tensor(angle_degrees * np.pi / 180.0)
+        rot_matrix = torch.tensor([
+            [torch.cos(angle_rad), 0, torch.sin(angle_rad)],
+            [0, 1, 0],
+            [-torch.sin(angle_rad), 0, torch.cos(angle_rad)]
+        ], dtype=vertices.dtype)
+        
+        return torch.matmul(vertices, rot_matrix)
+
+    def scale_mesh(self, vertices, scale_factor=1.5):
+        """Scale mesh uniformly"""
+        return vertices * scale_factor
+
+    def add_noise(self, vertices, noise_factor=0.05):
+        """Add random noise to vertices"""
+        noise = torch.randn_like(vertices) * noise_factor
+        return vertices + noise
+
+    def augment_mesh(self, vertices, faces):
+        results = {}
+        results['labels'] = self.transform_descriptions
+
+        try:
+            # Rotate mesh
+            rotated_vertices = self.rotate_mesh(vertices)
+            rotated_plot = visualize_3d_mesh(
+                rotated_vertices.numpy(), 
+                faces.numpy(), 
+                "Rotated Mesh"
+            )
+            results['rotated'] = {
+                'vertices': rotated_vertices.numpy().tolist(),
+                'faces': faces.numpy().tolist(),
+                'plot': rotated_plot
+            }
+
+            # Scale mesh
+            scaled_vertices = self.scale_mesh(vertices)
+            scaled_plot = visualize_3d_mesh(
+                scaled_vertices.numpy(), 
+                faces.numpy(), 
+                "Scaled Mesh"
+            )
+            results['scaled'] = {
+                'vertices': scaled_vertices.numpy().tolist(),
+                'faces': faces.numpy().tolist(),
+                'plot': scaled_plot
+            }
+
+            # Add noise
+            noisy_vertices = self.add_noise(vertices)
+            noisy_plot = visualize_3d_mesh(
+                noisy_vertices.numpy(), 
+                faces.numpy(), 
+                "Noisy Mesh"
+            )
+            results['noisy'] = {
+                'vertices': noisy_vertices.numpy().tolist(),
+                'faces': faces.numpy().tolist(),
+                'plot': noisy_plot
+            }
+
+        except Exception as e:
+            print(f"Error in mesh augmentation: {str(e)}")
+            results['error'] = str(e)
+
+        return results
+
+# Update the augment_data function to include 3D augmentation
 def augment_data(data, file_type, filename=None):
-    """
-    Augmentation operations
-    Args:
-        data: The loaded data
-        file_type: Type of the file ('text', 'image', 'audio', '3d')
-        filename: Original filename (needed for audio processing)
-    Returns:
-        Augmented data
-    """
     if file_type == 'text':
         augmenter = TextAugmenter()
-        lines = data.strip().split('\n')
-        
-        augmented_results = {
-            'original_text': data,
-            'augmentations': {
-                'synonym_replacement': [],
-                'random_insertion': [],
-            }
-        }
-        
-        for line in lines:
-            syn_replaced = augmenter.synonym_replacement(line, n=2)
-            random_inserted = augmenter.random_insertion(line, n=2)
-            
-            augmented_results['augmentations']['synonym_replacement'].append(syn_replaced)
-            augmented_results['augmentations']['random_insertion'].append(random_inserted)
-        
-        return augmented_results
+        return augmenter.augment_text(data)
     
     elif file_type == 'image':
         augmenter = ImageAugmenter()
         if isinstance(data, dict) and 'image_data' in data:
-            # If data is coming from the web interface
             return augmenter.augment_image(data['image_data'])
         else:
-            # If data is direct PIL Image
             return augmenter.augment_image(data)
     
     elif file_type == 'audio':
@@ -354,5 +457,26 @@ def augment_data(data, file_type, filename=None):
         return augmenter.augment_audio(data, filename)
     
     elif file_type == '3d':
-        # Add your 3D file augmentation code here
-        return data
+        augmenter = MeshAugmenter()
+        vertices = data['vertices']
+        faces = data['faces']
+        return augmenter.augment_mesh(vertices, faces)
+
+def create_waveform_plot(waveform, sample_rate, title="Waveform"):
+    plt.figure(figsize=(6, 2))  # Smaller figure size
+    plt.plot(waveform.t().numpy())
+    plt.title(title, fontsize=10)  # Smaller font size
+    plt.xlabel("Sample", fontsize=8)
+    plt.ylabel("Amplitude", fontsize=8)
+    plt.xticks(fontsize=8)
+    plt.yticks(fontsize=8)
+    plt.grid(True)
+    plt.tight_layout()  # Adjust layout to fit
+    
+    # Save plot to a base64 string
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+    plt.close()
+    buf.seek(0)
+    plot_data = base64.b64encode(buf.getvalue()).decode('utf-8')
+    return f'data:image/png;base64,{plot_data}'
