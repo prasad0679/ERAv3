@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MNIST CNN Training Progress</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>MNIST CNN Training Progress</h1>
+        
+        <div class="charts">
+            <div id="lossChart"></div>
+            <div id="accuracyChart"></div>
+        </div>
+        
+        <div id="predictions" class="predictions-container">
+            <h2>Model Predictions</h2>
+            <div id="predictionImages"></div>
+        </div>
+    </div>
+
+    <script>
+        function updateCharts() {
+            fetch('/progress')
+                .then(response => response.json())
+                .then(data => {
+                    const lossTrace = {
+                        y: data.train_losses,
+                        type: 'scatter',
+                        name: 'Training Loss'
+                    };
+                    
+                    const trainAccTrace = {
+                        y: data.train_accuracies,
+                        type: 'scatter',
+                        name: 'Training Accuracy',
+                        line: {color: '#2ca02c'}
+                    };
+                    
+                    const testAccTrace = {
+                        y: data.test_accuracies,
+                        type: 'scatter',
+                        name: 'Test Accuracy',
+                        line: {color: '#ff7f0e'}
+                    };
+                    
+                    Plotly.newPlot('lossChart', [lossTrace], {
+                        title: 'Training Loss',
+                        xaxis: { title: 'Iterations' },
+                        yaxis: { title: 'Loss' }
+                    });
+                    
+                    Plotly.newPlot('accuracyChart', [trainAccTrace, testAccTrace], {
+                        title: 'Model Accuracy',
+                        xaxis: { title: 'Iterations' },
+                        yaxis: { 
+                            title: 'Accuracy (%)',
+                            range: [0, 100]
+                        }
+                    });
+                });
+        }
+
+        function displayPredictions() {
+            fetch('/predictions')
+                .then(response => response.json())
+                .then(predictions => {
+                    if (predictions.length > 0) {
+                        const container = document.getElementById('predictionImages');
+                        container.innerHTML = '';
+                        
+                        predictions.forEach(pred => {
+                            const canvas = document.createElement('canvas');
+                            canvas.width = 28;
+                            canvas.height = 28;
+                            const ctx = canvas.getContext('2d');
+                            const imageData = ctx.createImageData(28, 28);
+                            
+                            for (let i = 0; i < pred.image.length; i++) {
+                                for (let j = 0; j < pred.image[i].length; j++) {
+                                    const idx = (i * 28 + j) * 4;
+                                    const value = Math.floor((pred.image[i][j] + 0.5) * 255);
+                                    imageData.data[idx] = value;
+                                    imageData.data[idx + 1] = value;
+                                    imageData.data[idx + 2] = value;
+                                    imageData.data[idx + 3] = 255;
+                                }
+                            }
+                            
+                            ctx.putImageData(imageData, 0, 0);
+                            
+                            const div = document.createElement('div');
+                            div.className = 'prediction-item';
+                            div.appendChild(canvas);
+                            div.innerHTML += `<p>Predicted: ${pred.prediction}<br>Actual: ${pred.actual}</p>`;
+                            container.appendChild(div);
+                        });
+                    }
+                });
+        }
+
+        // Update charts every 5 seconds
+        setInterval(updateCharts, 5000);
+        
+        // Check for predictions every 5 seconds
+        setInterval(displayPredictions, 5000);
+        
+        // Initial update
+        updateCharts();
+        displayPredictions();
+    </script>
+</body>
+</html> 
