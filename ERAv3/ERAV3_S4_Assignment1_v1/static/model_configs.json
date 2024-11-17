@@ -1,0 +1,1 @@
+{"model1": {"kernels": "32,64,128,128", "optimizer": "adam", "batch_size": 512, "epochs": 2}, "model2": {"kernels": "32,64,128,128", "optimizer": "sgd", "batch_size": 512, "epochs": 2}}

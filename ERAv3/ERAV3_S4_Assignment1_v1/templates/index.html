@@ -6,109 +6,614 @@
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 </head>
 <body>
-    <div class="container">
-        <h1>MNIST CNN Training Progress</h1>
-        
-        <div class="charts">
-            <div id="lossChart"></div>
-            <div id="accuracyChart"></div>
+    <div class="main-container">
+        <!-- Left Sidebar -->
+        <div class="sidebar">
+            <h2>Model Configurations</h2>
+            <div class="config-section">
+                <div class="model-config">
+                    <label>Model 1 Kernels:</label>
+                    <input type="text" id="model1-config" value="32,64,128,128" placeholder="e.g., 32,64,128,128">
+                    
+                    <label>Model 1 Optimizer:</label>
+                    <select id="model1-optimizer" class="config-select">
+                        <option value="adam">Adam</option>
+                        <option value="sgd">SGD</option>
+                    </select>
+                    
+                    <label>Model 1 Batch Size:</label>
+                    <input type="number" id="model1-batch-size" value="512" min="1" class="config-input">
+                    
+                    <label>Model 1 Epochs:</label>
+                    <input type="number" id="model1-epochs" value="4" min="1" class="config-input">
+                </div>
+                
+                <div class="model-config">
+                    <label>Model 2 Kernels:</label>
+                    <input type="text" id="model2-config" value="8,16,32,64" placeholder="e.g., 8,16,32,64">
+                    
+                    <label>Model 2 Optimizer:</label>
+                    <select id="model2-optimizer" class="config-select">
+                        <option value="adam">Adam</option>
+                        <option value="sgd">SGD</option>
+                    </select>
+                    
+                    <label>Model 2 Batch Size:</label>
+                    <input type="number" id="model2-batch-size" value="512" min="1" class="config-input">
+                    
+                    <label>Model 2 Epochs:</label>
+                    <input type="number" id="model2-epochs" value="4" min="1" class="config-input">
+                </div>
+                
+                <div class="button-group">
+                    <button id="start-training" class="primary-button">Start Model Training</button>
+                </div>
+                <div id="training-status" class="status-text"></div>
+            </div>
+            <div class="progress-section">
+                <div class="model-progress">
+                    <label>Model 1 Progress:</label>
+                    <div class="progress-bar-container">
+                        <div id="model1-progress" class="progress-bar"></div>
+                        <span id="model1-progress-text">0%</span>
+                    </div>
+                </div>
+                <div class="model-progress">
+                    <label>Model 2 Progress:</label>
+                    <div class="progress-bar-container">
+                        <div id="model2-progress" class="progress-bar"></div>
+                        <span id="model2-progress-text">0%</span>
+                    </div>
+                </div>
+            </div>
         </div>
-        
-        <div id="predictions" class="predictions-container">
-            <h2>Model Predictions</h2>
-            <div id="predictionImages"></div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <h1>MNIST CNN Training Progress</h1>
+            
+            <div class="charts-container">
+                <div class="chart-wrapper">
+                    <h3>Training Loss</h3>
+                    <div id="lossChart"></div>
+                </div>
+                <div class="chart-wrapper">
+                    <h3>Model Accuracy</h3>
+                    <div id="accuracyChart"></div>
+                </div>
+            </div>
+            
+            <div class="predictions-section">
+                <h2>Model Predictions</h2>
+                <div class="predictions-container">
+                    <div class="model-predictions">
+                        <h3>Model 1 Predictions</h3>
+                        <div id="predictions-model1" class="predictions-grid"></div>
+                    </div>
+                    <div class="model-predictions">
+                        <h3>Model 2 Predictions</h3>
+                        <div id="predictions-model2" class="predictions-grid"></div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
+        let currentModel = null;
+        const statusElement = document.getElementById('training-status');
+        let isTrainingActive = false;
+        const startButton = document.getElementById('start-training');
+        let model1Complete = false;
+        let model2Complete = false;
+        let isTrainingInProgress = false;
+        
+        startButton.addEventListener('click', async () => {
+            if (isTrainingInProgress) {
+                alert("Training is already in progress. Please wait for it to complete or stop it.");
+                return;
+            }
+
+            isTrainingInProgress = true;
+            startButton.disabled = true;
+            
+            // Reset progress data
+            await fetch('/reset_progress', {
+                method: 'POST'
+            });
+            
+            model1Complete = false;
+            model2Complete = false;
+            updateProgressBar('model1', 0);
+            updateProgressBar('model2', 0);
+            
+            try {
+                // Start Model 1
+                statusElement.textContent = "Training Model 1...";
+                currentModel = 'model1';
+                const model1Epochs = parseInt(document.getElementById('model1-epochs').value);
+                await startTraining('model1', document.getElementById('model1-config').value);
+                
+                // Wait for Model 1 to complete (check every 2 seconds)
+                while (isTrainingActive) {
+                    const progress = await fetch('/progress').then(r => r.json());
+                    if (progress.model1 && progress.model1.test_accuracy.length === model1Epochs) {
+                        model1Complete = true;
+                        break;
+                    }
+                    if (!isTrainingActive) {
+                        statusElement.textContent = "Training stopped after Model 1";
+                        break;
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+                
+                // Start Model 2 only if training wasn't stopped
+                if (isTrainingActive) {
+                    statusElement.textContent = "Training Model 2...";
+                    currentModel = 'model2';
+                    await startTraining('model2', document.getElementById('model2-config').value);
+                    
+                    // Wait for Model 2 to complete
+                    const model2Epochs = parseInt(document.getElementById('model2-epochs').value);
+                    while (isTrainingActive) {
+                        const progress = await fetch('/progress').then(r => r.json());
+                        if (progress.model2 && progress.model2.test_accuracy.length === model2Epochs) {
+                            model2Complete = true;
+                            break;
+                        }
+                        if (!isTrainingActive) {
+                            statusElement.textContent = "Training stopped during Model 2";
+                            break;
+                        }
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                    }
+                    
+                    if (isTrainingActive) {
+                        statusElement.textContent = "Training completed!";
+                    }
+                }
+            } catch (error) {
+                statusElement.textContent = "Error occurred during training";
+                console.error(error);
+            } finally {
+                isTrainingActive = false;
+                isTrainingInProgress = false;
+                startButton.disabled = false;
+            }
+        });
+
+        async function startTraining(modelId, config) {
+            const modelConfig = {
+                model_id: modelId,
+                kernel_config: config,
+                optimizer: document.getElementById(`${modelId}-optimizer`).value,
+                batch_size: parseInt(document.getElementById(`${modelId}-batch-size`).value),
+                epochs: parseInt(document.getElementById(`${modelId}-epochs`).value)
+            };
+
+            if (modelId === 'model1') {
+                // Also send model2 configurations
+                modelConfig.model2_config = document.getElementById('model2-config').value;
+                modelConfig.model2_optimizer = document.getElementById('model2-optimizer').value;
+                modelConfig.model2_batch_size = parseInt(document.getElementById('model2-batch-size').value);
+                modelConfig.model2_epochs = parseInt(document.getElementById('model2-epochs').value);
+            }
+
+            return fetch('/train', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(modelConfig)
+            }).then(response => response.json());
+        }
+
+        function updateProgressBar(modelId, progress) {
+            const progressBar = document.getElementById(`${modelId}-progress`);
+            const progressText = document.getElementById(`${modelId}-progress-text`);
+            const epochs = parseInt(document.getElementById(`${modelId}-epochs`).value);
+            
+            const percentage = Math.min((progress / epochs) * 100, 100);
+            
+            progressBar.style.width = `${percentage}%`;
+            progressText.textContent = `${Math.round(percentage)}%`;
+        }
+
         function updateCharts() {
             fetch('/progress')
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
                 .then(data => {
-                    const lossTrace = {
-                        y: data.train_losses,
-                        type: 'scatter',
-                        name: 'Training Loss'
-                    };
-                    
-                    const trainAccTrace = {
-                        y: data.train_accuracies,
-                        type: 'scatter',
-                        name: 'Training Accuracy',
-                        line: {color: '#2ca02c'}
-                    };
-                    
-                    const testAccTrace = {
-                        y: data.test_accuracies,
-                        type: 'scatter',
-                        name: 'Test Accuracy',
-                        line: {color: '#ff7f0e'}
-                    };
-                    
-                    Plotly.newPlot('lossChart', [lossTrace], {
-                        title: 'Training Loss',
-                        xaxis: { title: 'Iterations' },
-                        yaxis: { title: 'Loss' }
-                    });
-                    
-                    Plotly.newPlot('accuracyChart', [trainAccTrace, testAccTrace], {
-                        title: 'Model Accuracy',
-                        xaxis: { title: 'Iterations' },
-                        yaxis: { 
-                            title: 'Accuracy (%)',
-                            range: [0, 100]
+                    // Update progress bars
+                    if (data.model1) {
+                        const model1Epochs = parseInt(document.getElementById('model1-epochs').value);
+                        const progress = data.model1.test_accuracy.length;
+                        updateProgressBar('model1', progress);
+                        if (progress === model1Epochs) {
+                            model1Complete = true;
                         }
-                    });
+                    }
+                    if (data.model2) {
+                        const model2Epochs = parseInt(document.getElementById('model2-epochs').value);
+                        const progress = data.model2.test_accuracy.length;
+                        updateProgressBar('model2', progress);
+                        if (progress === model2Epochs) {
+                            model2Complete = true;
+                        }
+                    }
+
+                    // Create parameter display text for each model
+                    const model1Params = `Model 1: [${document.getElementById('model1-config').value}] | 
+                                        Optimizer: ${document.getElementById('model1-optimizer').value} | 
+                                        Batch Size: ${document.getElementById('model1-batch-size').value} | 
+                                        Epochs: ${document.getElementById('model1-epochs').value}`;
+                    
+                    const model2Params = `Model 2: [${document.getElementById('model2-config').value}] | 
+                                        Optimizer: ${document.getElementById('model2-optimizer').value} | 
+                                        Batch Size: ${document.getElementById('model2-batch-size').value} | 
+                                        Epochs: ${document.getElementById('model2-epochs').value}`;
+
+                    // Create loss traces for both models
+                    const traces = [];
+                    if (data.model1) {
+                        traces.push({
+                            y: data.model1.training_loss,
+                            type: 'scatter',
+                            name: 'Model 1 Loss',
+                            line: {color: 'rgb(75, 192, 192)'}
+                        });
+                    }
+                    if (data.model2) {
+                        traces.push({
+                            y: data.model2.training_loss,
+                            type: 'scatter',
+                            name: 'Model 2 Loss',
+                            line: {color: 'rgb(255, 99, 132)'}
+                        });
+                    }
+
+                    const layout = {
+                        title: {
+                            text: '<b>Training Loss</b><br>' +
+                                  `<span style="font-size: 11px; font-weight: 600">${model1Params}</span>` +
+                                  (data.model2 ? `<br><span style="font-size: 11px; font-weight: 600">${model2Params}</span>` : ''),
+                            font: { 
+                                size: 18,
+                                weight: 600
+                            }
+                        },
+                        xaxis: { 
+                            title: {
+                                text: 'Iterations',
+                                font: {
+                                    size: 14,
+                                    weight: 600
+                                }
+                            }
+                        },
+                        yaxis: { 
+                            title: {
+                                text: 'Loss',
+                                font: {
+                                    size: 14,
+                                    weight: 600
+                                }
+                            }
+                        },
+                        paper_bgcolor: 'rgba(0,0,0,0)',
+                        plot_bgcolor: 'rgba(0,0,0,0)',
+                        margin: { t: 80 }  // Increased top margin for parameters
+                    };
+
+                    Plotly.newPlot('lossChart', traces, layout);
+
+                    // Create accuracy traces
+                    const accTraces = [];
+                    if (data.model1) {
+                        accTraces.push(
+                            {
+                                y: data.model1.train_accuracy,
+                                type: 'scatter',
+                                name: 'Model 1 Train Acc',
+                                line: {color: 'rgb(75, 192, 192)'}
+                            },
+                            {
+                                y: data.model1.test_accuracy,
+                                type: 'scatter',
+                                name: 'Model 1 Test Acc',
+                                line: {color: 'rgb(75, 192, 192)', dash: 'dash'}
+                            }
+                        );
+                    }
+                    if (data.model2) {
+                        accTraces.push(
+                            {
+                                y: data.model2.train_accuracy,
+                                type: 'scatter',
+                                name: 'Model 2 Train Acc',
+                                line: {color: 'rgb(255, 99, 132)'}
+                            },
+                            {
+                                y: data.model2.test_accuracy,
+                                type: 'scatter',
+                                name: 'Model 2 Test Acc',
+                                line: {color: 'rgb(255, 99, 132)', dash: 'dash'}
+                            }
+                        );
+                    }
+
+                    const accLayout = {
+                        title: {
+                            text: '<b>Model Accuracy</b><br>' +
+                                  `<span style="font-size: 11px; font-weight: 600">${model1Params}</span>` +
+                                  (data.model2 ? `<br><span style="font-size: 11px; font-weight: 600">${model2Params}</span>` : ''),
+                            font: { 
+                                size: 18,
+                                weight: 600
+                            }
+                        },
+                        xaxis: { 
+                            title: {
+                                text: 'Iterations',
+                                font: {
+                                    size: 14,
+                                    weight: 600
+                                }
+                            }
+                        },
+                        yaxis: { 
+                            title: {
+                                text: 'Accuracy (%)',
+                                font: {
+                                    size: 14,
+                                    weight: 600
+                                }
+                            },
+                            range: [0, 100]
+                        },
+                        paper_bgcolor: 'rgba(0,0,0,0)',
+                        plot_bgcolor: 'rgba(0,0,0,0)',
+                        margin: { t: 80 }  // Increased top margin for parameters
+                    };
+
+                    Plotly.newPlot('accuracyChart', accTraces, accLayout);
+                })
+                .catch(error => {
+                    console.error('Error updating charts:', error);
                 });
         }
 
         function displayPredictions() {
             fetch('/predictions')
                 .then(response => response.json())
-                .then(predictions => {
-                    if (predictions.length > 0) {
-                        const container = document.getElementById('predictionImages');
-                        container.innerHTML = '';
-                        
-                        predictions.forEach(pred => {
-                            const canvas = document.createElement('canvas');
-                            canvas.width = 28;
-                            canvas.height = 28;
-                            const ctx = canvas.getContext('2d');
-                            const imageData = ctx.createImageData(28, 28);
-                            
-                            for (let i = 0; i < pred.image.length; i++) {
-                                for (let j = 0; j < pred.image[i].length; j++) {
-                                    const idx = (i * 28 + j) * 4;
-                                    const value = Math.floor((pred.image[i][j] + 0.5) * 255);
-                                    imageData.data[idx] = value;
-                                    imageData.data[idx + 1] = value;
-                                    imageData.data[idx + 2] = value;
-                                    imageData.data[idx + 3] = 255;
-                                }
+                .then(data => {
+                    ['model1', 'model2'].forEach(modelId => {
+                        const container = document.getElementById(`predictions-${modelId}`);
+                        // Only show predictions if the model training is complete
+                        if ((modelId === 'model1' && model1Complete) || 
+                            (modelId === 'model2' && model2Complete)) {
+                            if (data[modelId] && data[modelId].length > 0) {
+                                container.innerHTML = '';
+                                data[modelId].forEach(pred => {
+                                    const div = document.createElement('div');
+                                    div.className = 'prediction-item';
+                                    
+                                    // Create image element and set source directly
+                                    const img = document.createElement('img');
+                                    img.src = `data:image/png;base64,${pred.image}`;
+                                    img.className = 'prediction-image';
+                                    div.appendChild(img);
+                                    
+                                    const isCorrect = pred.prediction === pred.actual;
+                                    const predInfo = document.createElement('div');
+                                    predInfo.className = 'prediction-info';
+                                    predInfo.innerHTML = `
+                                        <span class="${isCorrect ? 'correct' : 'incorrect'}">
+                                            Predicted: ${pred.prediction}
+                                        </span><br>
+                                        <span>Actual: ${pred.actual}</span>
+                                    `;
+                                    div.appendChild(predInfo);
+                                    container.appendChild(div);
+                                });
                             }
-                            
-                            ctx.putImageData(imageData, 0, 0);
-                            
-                            const div = document.createElement('div');
-                            div.className = 'prediction-item';
-                            div.appendChild(canvas);
-                            div.innerHTML += `<p>Predicted: ${pred.prediction}<br>Actual: ${pred.actual}</p>`;
-                            container.appendChild(div);
-                        });
-                    }
+                        } else {
+                            container.innerHTML = '<div class="training-message">Waiting for training to complete...</div>';
+                        }
+                    });
+                })
+                .catch(error => {
+                    console.error('Error fetching predictions:', error);
                 });
         }
 
-        // Update charts every 5 seconds
-        setInterval(updateCharts, 5000);
-        
-        // Check for predictions every 5 seconds
-        setInterval(displayPredictions, 5000);
-        
-        // Initial update
-        updateCharts();
-        displayPredictions();
+        // Update the interval timing to reduce server load
+        setInterval(updateCharts, 3000);  // Every 3 seconds instead of 2
+        setInterval(displayPredictions, 3000);
+
+        // Add error handling for fetch calls
+        function updateCharts() {
+            fetch('/progress')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Update progress bars
+                    if (data.model1) {
+                        const model1Epochs = parseInt(document.getElementById('model1-epochs').value);
+                        const progress = data.model1.test_accuracy.length;
+                        updateProgressBar('model1', progress);
+                        if (progress === model1Epochs) {
+                            model1Complete = true;
+                        }
+                    }
+                    if (data.model2) {
+                        const model2Epochs = parseInt(document.getElementById('model2-epochs').value);
+                        const progress = data.model2.test_accuracy.length;
+                        updateProgressBar('model2', progress);
+                        if (progress === model2Epochs) {
+                            model2Complete = true;
+                        }
+                    }
+
+                    // Create parameter display text for each model
+                    const model1Params = `Model 1: [${document.getElementById('model1-config').value}] | 
+                                        Optimizer: ${document.getElementById('model1-optimizer').value} | 
+                                        Batch Size: ${document.getElementById('model1-batch-size').value} | 
+                                        Epochs: ${document.getElementById('model1-epochs').value}`;
+                    
+                    const model2Params = `Model 2: [${document.getElementById('model2-config').value}] | 
+                                        Optimizer: ${document.getElementById('model2-optimizer').value} | 
+                                        Batch Size: ${document.getElementById('model2-batch-size').value} | 
+                                        Epochs: ${document.getElementById('model2-epochs').value}`;
+
+                    // Create loss traces for both models
+                    const traces = [];
+                    if (data.model1) {
+                        traces.push({
+                            y: data.model1.training_loss,
+                            type: 'scatter',
+                            name: 'Model 1 Loss',
+                            line: {color: 'rgb(75, 192, 192)'}
+                        });
+                    }
+                    if (data.model2) {
+                        traces.push({
+                            y: data.model2.training_loss,
+                            type: 'scatter',
+                            name: 'Model 2 Loss',
+                            line: {color: 'rgb(255, 99, 132)'}
+                        });
+                    }
+
+                    const layout = {
+                        title: {
+                            text: '<b>Training Loss</b><br>' +
+                                  `<span style="font-size: 11px; font-weight: 600">${model1Params}</span>` +
+                                  (data.model2 ? `<br><span style="font-size: 11px; font-weight: 600">${model2Params}</span>` : ''),
+                            font: { 
+                                size: 18,
+                                weight: 600
+                            }
+                        },
+                        xaxis: { 
+                            title: {
+                                text: 'Iterations',
+                                font: {
+                                    size: 14,
+                                    weight: 600
+                                }
+                            }
+                        },
+                        yaxis: { 
+                            title: {
+                                text: 'Loss',
+                                font: {
+                                    size: 14,
+                                    weight: 600
+                                }
+                            }
+                        },
+                        paper_bgcolor: 'rgba(0,0,0,0)',
+                        plot_bgcolor: 'rgba(0,0,0,0)',
+                        margin: { t: 80 }  // Increased top margin for parameters
+                    };
+
+                    Plotly.newPlot('lossChart', traces, layout);
+
+                    // Create accuracy traces
+                    const accTraces = [];
+                    if (data.model1) {
+                        accTraces.push(
+                            {
+                                y: data.model1.train_accuracy,
+                                type: 'scatter',
+                                name: 'Model 1 Train Acc',
+                                line: {color: 'rgb(75, 192, 192)'}
+                            },
+                            {
+                                y: data.model1.test_accuracy,
+                                type: 'scatter',
+                                name: 'Model 1 Test Acc',
+                                line: {color: 'rgb(75, 192, 192)', dash: 'dash'}
+                            }
+                        );
+                    }
+                    if (data.model2) {
+                        accTraces.push(
+                            {
+                                y: data.model2.train_accuracy,
+                                type: 'scatter',
+                                name: 'Model 2 Train Acc',
+                                line: {color: 'rgb(255, 99, 132)'}
+                            },
+                            {
+                                y: data.model2.test_accuracy,
+                                type: 'scatter',
+                                name: 'Model 2 Test Acc',
+                                line: {color: 'rgb(255, 99, 132)', dash: 'dash'}
+                            }
+                        );
+                    }
+
+                    const accLayout = {
+                        title: {
+                            text: '<b>Model Accuracy</b><br>' +
+                                  `<span style="font-size: 11px; font-weight: 600">${model1Params}</span>` +
+                                  (data.model2 ? `<br><span style="font-size: 11px; font-weight: 600">${model2Params}</span>` : ''),
+                            font: { 
+                                size: 18,
+                                weight: 600
+                            }
+                        },
+                        xaxis: { 
+                            title: {
+                                text: 'Iterations',
+                                font: {
+                                    size: 14,
+                                    weight: 600
+                                }
+                            }
+                        },
+                        yaxis: { 
+                            title: {
+                                text: 'Accuracy (%)',
+                                font: {
+                                    size: 14,
+                                    weight: 600
+                                }
+                            },
+                            range: [0, 100]
+                        },
+                        paper_bgcolor: 'rgba(0,0,0,0)',
+                        plot_bgcolor: 'rgba(0,0,0,0)',
+                        margin: { t: 80 }  // Increased top margin for parameters
+                    };
+
+                    Plotly.newPlot('accuracyChart', accTraces, accLayout);
+                })
+                .catch(error => {
+                    console.error('Error updating charts:', error);
+                });
+        }
+
+        // Add cleanup for intervals when the page unloads
+        window.addEventListener('beforeunload', () => {
+            clearInterval(chartInterval);
+            clearInterval(predictionInterval);
+        });
+
+        // Store interval IDs
+        const chartInterval = setInterval(updateCharts, 3000);
+        const predictionInterval = setInterval(displayPredictions, 3000);
     </script>
 </body>
 </html> 
