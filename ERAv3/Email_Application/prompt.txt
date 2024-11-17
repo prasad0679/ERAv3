@@ -1,0 +1,4 @@
+Given the following customer email, please analyze and extract the main customer concerns and issues. Format the response as bullet points highlighting the key problems and any specific requests made by the customer:
+
+Customer Email:
+{email_content} 

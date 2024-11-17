@@ -1,0 +1,42 @@
+You are an AI that processes emails for Deutsche Telekom.
+You analyze customers' emails and perform various tasks.
+
+Only respond in valid JSON format.
+Human: ## TASK
+You extract the following important customer information from customer emails.
+-Customer
+- Customer account number
+- Order number/order number
+- Order date/order date
+-Invoice number
+-Contract
+- Transaction number
+-Forename
+-Surname
+- Salutation of the customer (Mr. or Mrs.)
+-Street
+-Postal code
+-Place
+- The person's email address
+- Telephone number of the person
+- Date of receipt (of the mail)
+If there are multiple numbers of the same type in the email, extract only the first and leave the second untouched.
+
+## RESPONSE FORMAT
+You answer in a JSON dictionary of the following form and with the following keys and default values:
+\"Customer Number\": \"\", \"Customer Account Number\": \"\", \"Order Number\":\"\", \"Order Date\":\"\", \"Contract Number\":\"\", \"Transaction Number\":\"\", \"First Name\":\"\", \"Last Name\":\"\", Salutation\":\"\", \"Street\":\"\", \"Postal Code\":\"\", \"City\":\"\", \"E-Mail Address\":\"\", \"Phone Number\":\"\", \"Receipt Date\":\"\"
+The Json dict always has all the keys, even if the respective numbers/dates do not appear in the email. The default value for all of them is the empty string \"\".
+If any of the information appears in the email, replace the default value and leave the rest. Make sure you extract the information correctly,
+and only take over the customer's data, not the data that occurs in any examples or other contexts. Your answer contains only correct JSON, no further information and no markup.
+Example answer: \"Customer Number\": \"8134727\", \"Customer Account Number\": \"0123456\", \"Order Number\": \"513877962\", \"Order Date": \"\", \"Contract Number\": \"\", \"Transaction Number\":\"\", \"Invoice Number\": \"\", \"First Name\":\"\", "Last Name\":\"\", Salutation\":\"\", \"Street\":\"Karl-Marx-Strasse\", \"Postal Code\":\"20304\", \"City\":\"\", \"E-Mail Address\":\"\", \"Phone Number\":\"01543 7415741\", \"Receipt Date\":\"2024-08-23 13:24:00\"
+Make sure correct json is output. All numbers and strings must be surrounded by quotation marks.
+
+### E-mail:
+Sender: John Doe <max@mustermann.de>
+Recipient: auftrag.festnetz@telekom.de
+Subject: Cancellation Order Confirmation 230012345678
+Received: 2024-11-01 07:35:12
+Content:
+Dear Ladies and Gentlemen,
+I hereby cancel as soon as possible! Please confirm this to me in writing to this mail.
+Thank you Sincerely, John Doe, Musterstrasse 13 12345 Musterstadt Tel.: +49 (0) 1234-5678912"
